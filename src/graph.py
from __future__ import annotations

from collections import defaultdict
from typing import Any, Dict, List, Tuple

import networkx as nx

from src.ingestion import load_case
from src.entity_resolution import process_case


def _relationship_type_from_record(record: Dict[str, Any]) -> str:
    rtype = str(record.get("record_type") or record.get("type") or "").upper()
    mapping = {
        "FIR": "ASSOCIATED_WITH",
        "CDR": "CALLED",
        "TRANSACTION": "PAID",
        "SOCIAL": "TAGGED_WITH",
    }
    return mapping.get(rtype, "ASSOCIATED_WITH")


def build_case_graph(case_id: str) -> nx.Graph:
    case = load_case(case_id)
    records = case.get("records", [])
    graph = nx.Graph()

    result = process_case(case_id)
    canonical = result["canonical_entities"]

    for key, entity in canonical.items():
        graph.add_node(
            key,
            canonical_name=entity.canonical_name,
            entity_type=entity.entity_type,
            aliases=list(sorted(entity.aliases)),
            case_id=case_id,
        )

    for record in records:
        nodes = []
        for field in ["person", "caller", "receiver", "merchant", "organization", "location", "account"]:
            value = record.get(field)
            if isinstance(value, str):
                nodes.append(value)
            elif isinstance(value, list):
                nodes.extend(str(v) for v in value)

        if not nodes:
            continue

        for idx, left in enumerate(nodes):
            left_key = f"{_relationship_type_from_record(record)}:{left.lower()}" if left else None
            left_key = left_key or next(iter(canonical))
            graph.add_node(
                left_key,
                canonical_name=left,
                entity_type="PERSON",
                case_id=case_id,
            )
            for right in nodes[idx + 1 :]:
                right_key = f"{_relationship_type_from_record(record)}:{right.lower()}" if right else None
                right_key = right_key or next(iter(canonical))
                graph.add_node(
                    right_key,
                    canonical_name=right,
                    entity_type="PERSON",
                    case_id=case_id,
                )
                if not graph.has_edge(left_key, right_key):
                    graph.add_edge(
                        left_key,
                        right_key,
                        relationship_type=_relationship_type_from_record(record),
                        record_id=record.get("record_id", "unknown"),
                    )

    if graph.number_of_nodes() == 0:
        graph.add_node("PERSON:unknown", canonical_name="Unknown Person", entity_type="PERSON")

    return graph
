@@ -1,0 +1,107 @@
+from __future__ import annotations
+
+import re
+from collections import defaultdict
+from dataclasses import dataclass, field
+from typing import Any, Dict, Iterable, List, Set
+
+from src.ingestion import load_case
+
+
+@dataclass
+class CanonicalEntity:
+    canonical_id: str
+    canonical_name: str
+    entity_type: str
+    aliases: Set[str] = field(default_factory=set)
+    source_records: List[Dict[str, Any]] = field(default_factory=list)
+    case_ids: Set[str] = field(default_factory=set)
+
+
+def _normalize_name(value: str) -> str:
+    value = re.sub(r"\s+", " ", value or "").strip()
+    return value.title()
+
+
+def _top_level_type_from_record(record: Dict[str, Any]) -> str:
+    record_type = str(record.get("record_type") or record.get("type") or "").upper()
+    if record_type in {"FIR", "CASE_FILE"}:
+        return "PERSON"
+    if record_type in {"CDR", "CALL_LOG"}:
+        return "PHONE"
+    if record_type in {"TRANSACTION", "PAYMENT"}:
+        return "ACCOUNT"
+    if record_type in {"SOCIAL", "MEDIA"}:
+        return "ORGANIZATION"
+    return "PERSON"
+
+
+def _entity_candidates_from_record(record: Dict[str, Any]) -> Iterable[str]:
+    values: List[str] = []
+    for key in ("person", "name", "caller", "receiver", "merchant", "location", "entity", "organization", "phone"):
+        if key in record:
+            val = record.get(key)
+            if isinstance(val, str):
+                values.append(val)
+            elif isinstance(val, list):
+                values.extend(str(item) for item in val)
+    for key, value in record.items():
+        if isinstance(value, str):
+            if any(token in key.lower() for token in ["name", "person", "contact", "location", "merchant", "organization"]):
+                values.append(value)
+    return values
+
+
+def process_case(case_id: str) -> Dict[str, Any]:
+    case = load_case(case_id)
+    records = case.get("records", [])
+
+    canonical: Dict[str, CanonicalEntity] = {}
+    extracted = 0
+    body_types = defaultdict(int)
+
+    for record in records:
+        for candidate in _entity_candidates_from_record(record):
+            if not candidate or len(candidate.strip()) < 2:
+                continue
+            extracted += 1
+            name = _normalize_name(candidate)
+            base_type = _top_level_type_from_record(record)
+            key = f"{base_type}:{name.lower()}" if name else f"UNKNOWN:{extracted}"
+            ent = canonical.setdefault(
+                key,
+                CanonicalEntity(
+                    canonical_id=key,
+                    canonical_name=name,
+                    entity_type=base_type,
+                    aliases=set(),
+                    source_records=[],
+                    case_ids=set(),
+                ),
+            )
+            ent.aliases.add(name)
+            ent.source_records.append(record)
+            ent.case_ids.add(case_id)
+            body_types[base_type] += 1
+
+    if not canonical:
+        canonical["PERSON:unknown"] = CanonicalEntity(
+            canonical_id="PERSON:unknown",
+            canonical_name="Unknown Person",
+            entity_type="PERSON",
+            aliases={"Unknown Person"},
+            source_records=[],
+            case_ids={case_id},
+        )
+
+    counts = {
+        "total_extracted": extracted,
+        "total_canonical": len(canonical),
+        "by_type": dict(body_types),
+    }
+
+    return {
+        "case_id": case_id,
+        "counts": counts,
+        "canonical_entities": canonical,
+    }

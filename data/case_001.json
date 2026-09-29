@@ -1,0 +1,43 @@
+{
+  "case_id": "case_001",
+  "counts": {
+    "fir": 2,
+    "cdr": 9,
+    "transactions": 6,
+    "social": 4
+  },
+  "records": [
+    {
+      "record_id": "FIR_001",
+      "record_type": "FIR",
+      "person": "Rohit Sharma",
+      "organization": "Suresh Traders",
+      "location": "Andheri East",
+      "timestamp": "2026-08-01T09:00:00"
+    },
+    {
+      "record_id": "CDR_001",
+      "record_type": "CDR",
+      "caller": "Rohit Sharma",
+      "receiver": "Vikas Patil",
+      "phone": "+91-9867-111111",
+      "timestamp": "2026-08-01T10:15:00"
+    },
+    {
+      "record_id": "TX_001",
+      "record_type": "TRANSACTION",
+      "person": "Vikas Patil",
+      "merchant": "Suresh Traders",
+      "account": "A/C-1002",
+      "timestamp": "2026-08-01T11:20:00"
+    },
+    {
+      "record_id": "SOC_001",
+      "record_type": "SOCIAL",
+      "person": "Rohit Sharma",
+      "organization": "Suresh Traders",
+      "location": "Chandivali",
+      "timestamp": "2026-08-01T15:45:00"
+    }
+  ]
+}
